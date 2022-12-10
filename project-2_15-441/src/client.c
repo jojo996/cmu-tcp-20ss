@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "backend.h"
 #include "cmu_tcp.h"
 
 void functionality(cmu_socket_t *sock) {
@@ -48,6 +49,59 @@ void functionality(cmu_socket_t *sock) {
   }
 }
 
+void TCP_handshake_client(cmu_socket_t *sock) {
+  while (sock->state != TCP_ESTABLISHED) {
+    unsigned char *packet;
+    cmu_tcp_header_t *header;
+    uint32_t seq, ack;
+    switch(sock->state){
+      case TCP_CLOSED:{// 初次连接
+        seq = 0;
+        packet = create_packet(sock->my_port, sock->their_port, seq, 0,
+                                   DEFAULT_HEADER_LEN, DEFAULT_HEADER_LEN,
+                                   SYN_FLAG_MASK,
+                                   0, 0, NULL, NULL, 0);
+        sendto(sock->socket, packet, DEFAULT_HEADER_LEN, 0,
+               (struct sockaddr *)&(sock->conn), sizeof(sock->conn));
+        free(packet);
+        sock->state = TCP_SYN_SEND;
+        sock->window.last_ack_received = seq;
+        sock->window.last_seq_received = 0;
+        break;
+      }
+      case TCP_SYN_SEND:{
+        printf("waiting for SYN-ACK...");
+        header = check_for_data(sock, TIMEOUT);
+        if ((get_flags(header)) == (SYN_FLAG_MASK | ACK_FLAG_MASK)) {
+          ack = get_seq(header) + 1;
+          seq = get_ack(header);
+          // sock->window.adv_window = get_advertised_window(header); //todo 这部分和滑窗相关 
+          // 上面这个函数不是用来解析window的吗？这里为什么要调用 todo
+          /* 发送中包含本端的接收窗口大小 */
+          packet = create_packet(sock->my_port, sock->their_port, seq, ack,
+                            DEFAULT_HEADER_LEN, DEFAULT_HEADER_LEN,
+                            ACK_FLAG_MASK /* 返回ACK */, 
+                            MAX_RECV_SIZE, 0, NULL, NULL, 0);
+          sendto(sock->socket, packet, DEFAULT_HEADER_LEN, 0,
+                 (struct sockaddr *)&(sock->conn), sizeof(sock->conn));
+          free(packet);
+          sock->state = TCP_ESTABLISHED;
+          sock->window.last_ack_received = ack;
+          sock->window.last_seq_received = seq;
+          printf("连接建立成功！");
+        } else {
+          printf("连接建立失败,自动进行下一次尝试");
+          sock->state = TCP_CLOSED;
+        }
+        free(header);
+        break;
+      }
+      default:
+        break;
+    }
+  }
+}
+
 int main() {
   int portno;
   char *serverip;
@@ -68,6 +122,8 @@ int main() {
   if (cmu_socket(&socket, TCP_INITIATOR, portno, serverip) < 0) {
     exit(EXIT_FAILURE);
   }
+
+  TCP_handshake_client(&socket); //不成功就会一直尝试连接
 
   functionality(&socket);
 

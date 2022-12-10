@@ -16,6 +16,16 @@
 #ifndef PROJECT_2_15_441_INC_BACKEND_H_
 #define PROJECT_2_15_441_INC_BACKEND_H_
 
+#include "cmu_tcp.h"
+
+int has_been_acked(cmu_socket_t* sock, uint32_t seq);
+
+void handle_message(cmu_socket_t* sock, uint8_t* pkt);
+
+cmu_tcp_header_t* check_for_data(cmu_socket_t* sock, cmu_read_mode_t flags);
+
+void single_send(cmu_socket_t* sock, uint8_t* data, int buf_len);
+
 /**
  * Launches the CMU-TCP backend.
  *

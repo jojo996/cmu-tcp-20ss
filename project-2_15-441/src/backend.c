@@ -122,8 +122,9 @@ void handle_message(cmu_socket_t *sock, uint8_t *pkt) {
  * @param flags Flags that determine how the socket should wait for data. Check
  *             `cmu_read_mode_t` for more information.
  */
-void check_for_data(cmu_socket_t *sock, cmu_read_mode_t flags) {
+cmu_tcp_header_t* check_for_data(cmu_socket_t *sock, cmu_read_mode_t flags) {
   cmu_tcp_header_t hdr;
+  // uint8_t hdr[DEFAULT_HEADER_LEN];
   uint8_t *pkt;
   socklen_t conn_len = sizeof(sock->conn);
   ssize_t len = 0;
@@ -163,10 +164,13 @@ void check_for_data(cmu_socket_t *sock, cmu_read_mode_t flags) {
                    (struct sockaddr *)&(sock->conn), &conn_len);
       buf_size = buf_size + n;
     }
-    handle_message(sock, pkt);
+    handle_message(sock, pkt); //吧pkt的payload部分拼接到sock->received_buf的后面，并且现在的received_len是原先长度加上payload_len
     free(pkt);
   }
   pthread_mutex_unlock(&(sock->recv_lock));
+  cmu_tcp_header_t *header = (cmu_tcp_header_t *)malloc(DEFAULT_HEADER_LEN);
+  memcpy(header, &hdr, DEFAULT_HEADER_LEN);
+  return header;
 }
 
 /**

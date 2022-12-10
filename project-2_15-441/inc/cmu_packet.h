@@ -19,23 +19,25 @@
 #include <stdint.h>
 
 typedef struct {
-  uint32_t identifier;         // Identifier for the CMU-TCP protocol.
-  uint16_t source_port;        // Source port.
-  uint16_t destination_port;   // Destination port.
-  uint32_t seq_num;            // Sequence number.
-  uint32_t ack_num;            // Acknowledgement number.
-  uint16_t hlen;               // Header length.
-  uint16_t plen;               // Packet length.
-  uint8_t flags;               // Flags.
-  uint16_t advertised_window;  // Advertised window.
-  uint16_t extension_length;   // Extension length.
-  uint8_t extension_data[];    // Extension data.
+  uint32_t identifier;         // 4 Identifier for the CMU-TCP protocol.
+  uint16_t source_port;        // 2 Source port.
+  uint16_t destination_port;   // 2 Destination port.
+  uint32_t seq_num;            // 4 Sequence number.
+  uint32_t ack_num;            // 4 Acknowledgement number.
+  uint16_t hlen;               // 2 Header length.
+  uint16_t plen;               // 2 Packet length.
+  uint8_t flags;               // 1 Flags.
+  uint16_t advertised_window;  // 2 Advertised window.
+  uint16_t extension_length;   // 2 Extension length.
+  uint8_t extension_data[];    // x Extension data.
 } __attribute__((__packed__)) cmu_tcp_header_t;
 
 #define SYN_FLAG_MASK 0x8
 #define ACK_FLAG_MASK 0x4
 #define FIN_FLAG_MASK 0x2
 #define IDENTIFIER 15441
+#define DEFAULT_HEADER_LEN 25
+
 
 // Maximum Segment Size. Make sure to update this if your CCA requires extension
 // data for all packets, as this reduces the payload and thus the MSS.

@@ -61,7 +61,7 @@ int cmu_socket(cmu_socket_t *sock, const cmu_socket_type_t socket_type,
   }
 
   switch (socket_type) {
-    case TCP_INITIATOR:
+    case TCP_INITIATOR: // client
       if (server_ip == NULL) {
         perror("ERROR server_ip NULL");
         return EXIT_ERROR;
@@ -82,7 +82,7 @@ int cmu_socket(cmu_socket_t *sock, const cmu_socket_type_t socket_type,
 
       break;
 
-    case TCP_LISTENER:
+    case TCP_LISTENER: // server
       memset(&conn, 0, sizeof(conn));
       conn.sin_family = AF_INET;
       conn.sin_addr.s_addr = htonl(INADDR_ANY);

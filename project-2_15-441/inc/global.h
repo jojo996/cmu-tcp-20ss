@@ -1,0 +1,21 @@
+#ifndef _GLOBAL_H_
+#define _GLOBAL_H_
+
+typedef enum {
+  TCP_CLOSED = 1,
+  TCP_LISTEN = 2,
+  TCP_SYN_RCVD = 3,
+  TCP_SYN_SEND = 4,
+  TCP_ESTABLISHED = 5,
+  TCP_FIN_WAIT1 = 6,
+  TCP_FIN_WAIT2 = 7,
+  TCP_CLOSING = 8,
+  TCP_TIME_WAIT = 9,
+  TCP_CLOSE_WAIT = 10,
+  TCP_LAST_ACK = 11,
+  TCP_CONN_FAIL = 12,
+} TCP_State;
+
+#define MAX_RECV_SIZE 10000
+
+#endif

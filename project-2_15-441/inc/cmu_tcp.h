@@ -22,6 +22,9 @@
 
 #include "cmu_packet.h"
 #include "grading.h"
+#include "global.h"
+//理论上只有server能调用，但是为了让client用上check_for_data所以写到这里来
+// #include "backend.h"
 
 #define EXIT_SUCCESS 0
 #define EXIT_ERROR -1
@@ -30,6 +33,7 @@
 typedef struct {
   uint32_t next_seq_expected;
   uint32_t last_ack_received;
+  uint32_t last_seq_received;
   pthread_mutex_t ack_lock;
 } window_t;
 
@@ -49,6 +53,7 @@ typedef struct {
   int socket;
   pthread_t thread_id;
   uint16_t my_port;
+  uint16_t their_port;
   struct sockaddr_in conn;
   uint8_t* received_buf;
   int received_len;
@@ -61,6 +66,7 @@ typedef struct {
   int dying;
   pthread_mutex_t death_lock;
   window_t window;
+  TCP_State state;
 } cmu_socket_t;
 
 /*
@@ -71,7 +77,7 @@ typedef struct {
  * Read mode flags supported by a CMU-TCP socket.
  */
 typedef enum {
-  NO_FLAG = 0,  // Default behavior: block indefinitely until data is available.
+  NO_FLAG = 0,  // Default behavior: block indefinitely until data is available. //无限期停止直到有数据
   NO_WAIT,      // Return immediately if no data is available.
   TIMEOUT,      // Block until data is available or the timeout is reached.
 } cmu_read_mode_t;

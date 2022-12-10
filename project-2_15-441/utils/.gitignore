@@ -1,1 +1,8 @@
 *.pcap
+.vagrant/*
+*.log
+.idea/*
+project-2_15-441/server
+project-2_15-441/client
+project-2_15-441/build/*
+.vscode/*
