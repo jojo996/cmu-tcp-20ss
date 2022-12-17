@@ -29,12 +29,47 @@
 #define EXIT_SUCCESS 0
 #define EXIT_ERROR -1
 #define EXIT_FAILURE 1
+#define MAXSEQ 100
+#define MAX_BUFFER_SIZE 1000000
+
+
+// 发送方状态
+typedef enum {
+	SS_DEFAULT = 1,   // 默认
+	SS_TIME_OUT = 2,   // 超时
+	SS_SEND_OVER = 4,  // 当前数据发送完成
+} send_state;
+
+//滑窗接收单位，组织成链表形式
+typedef struct window_slot {
+	uint8_t recv_or_not;
+	char *msg;
+	struct window_slot *next; 
+} recvQ_slot;
 
 typedef struct {
   uint32_t next_seq_expected;
   uint32_t last_ack_received;
   uint32_t last_seq_received;
   pthread_mutex_t ack_lock;
+  uint32_t adv_window;  //窗口大小，固定为WINDOW_INITIAL_WINDOW_SIZE
+  uint32_t seq_expect;  //接收下一个包的seq
+  uint32_t next_send_seq; //发送下一个的seq
+  uint32_t dup_ack_num; //当前收到ack的数量
+  char send_buffer[MAX_BUFFER_SIZE+1];  // 发送方缓冲
+
+  send_state state; //发送方状态
+
+  //发送方窗口 |----------LAR+++++++++LFS--------| 
+	uint32_t LAR; 
+	uint32_t LFS; 
+  uint32_t DAT; // 数据的最大下标
+
+  //超时控制
+  uint8_t timer_flag;  // 时钟启用状态
+  long TimeoutInterval;  // 超时时间 
+	long EstimatedRTT;  // （加权）平均RTT时间
+	long DevRTT;  // RTT偏差时间
 } window_t;
 
 /**

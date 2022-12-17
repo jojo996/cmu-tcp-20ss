@@ -55,20 +55,20 @@ void TCP_handshake_server(cmu_socket_t *sock) {
   while (sock->state != TCP_ESTABLISHED){
     unsigned char *packet;
     cmu_tcp_header_t *header;
+    uint32_t seq,ack;
     switch (sock->state) {
       case TCP_CLOSED:
         sock->state = TCP_LISTEN;
+        seq = rand() % MAXSEQ;
+        ack = seq + 1;
         break;
       case TCP_LISTEN: { /* first time */
-        uint32_t seq;
         /* server堵塞直到有SYN到达 */
         printf("waiting for SYN...");
         header = check_for_data(sock, NO_FLAG);
         if ((get_flags(header) & SYN_FLAG_MASK) == SYN_FLAG_MASK) {
           printf("SYN-ACK received");
-          seq = get_seq(header);
-          uint32_t ack = seq + 1;
-          seq = 0;  // rand() % MAXSEQ; todo, 这里其实应该选另一个seq值
+          ack = get_ack(header);
           /* 这里是SYN|ACK */
           packet = create_packet(sock->my_port, sock->their_port, seq, ack,
                                      DEFAULT_HEADER_LEN, DEFAULT_HEADER_LEN,
@@ -91,7 +91,6 @@ void TCP_handshake_server(cmu_socket_t *sock) {
         int flag = ((get_flags(header) & ACK_FLAG_MASK) == ACK_FLAG_MASK);
         uint32_t ack = get_seq(header);
         uint32_t seq = get_ack(header);
-        // sock->window.adv_window = get_advertised_window(header); 
         if (flag && ack == sock->window.last_ack_received &&
             seq == sock->window.last_seq_received + 1) {
           sock->state = TCP_ESTABLISHED;

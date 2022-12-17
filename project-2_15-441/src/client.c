@@ -56,8 +56,9 @@ void TCP_handshake_client(cmu_socket_t *sock) {
     uint32_t seq, ack;
     switch(sock->state){
       case TCP_CLOSED:{// 初次连接
-        seq = 0;
-        packet = create_packet(sock->my_port, sock->their_port, seq, 0,
+        seq = rand() % MAXSEQ;
+        ack = seq + 1;
+        packet = create_packet(sock->my_port, sock->their_port, seq, ack,
                                    DEFAULT_HEADER_LEN, DEFAULT_HEADER_LEN,
                                    SYN_FLAG_MASK,
                                    0, 0, NULL, NULL, 0);
@@ -75,9 +76,6 @@ void TCP_handshake_client(cmu_socket_t *sock) {
         if ((get_flags(header)) == (SYN_FLAG_MASK | ACK_FLAG_MASK)) {
           ack = get_seq(header) + 1;
           seq = get_ack(header);
-          // sock->window.adv_window = get_advertised_window(header); //todo 这部分和滑窗相关 
-          // 上面这个函数不是用来解析window的吗？这里为什么要调用 todo
-          /* 发送中包含本端的接收窗口大小 */
           packet = create_packet(sock->my_port, sock->their_port, seq, ack,
                             DEFAULT_HEADER_LEN, DEFAULT_HEADER_LEN,
                             ACK_FLAG_MASK /* 返回ACK */, 

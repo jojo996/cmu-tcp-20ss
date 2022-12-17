@@ -27,6 +27,7 @@
 
 #include "cmu_packet.h"
 #include "cmu_tcp.h"
+#include "window.h"
 
 #define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
 
@@ -164,7 +165,7 @@ cmu_tcp_header_t* check_for_data(cmu_socket_t *sock, cmu_read_mode_t flags) {
                    (struct sockaddr *)&(sock->conn), &conn_len);
       buf_size = buf_size + n;
     }
-    handle_message(sock, pkt); //吧pkt的payload部分拼接到sock->received_buf的后面，并且现在的received_len是原先长度加上payload_len
+    handle_message(sock, pkt); //把pkt的payload部分拼接到sock->received_buf的后面，并且现在的received_len是原先长度加上payload_len
     free(pkt);
   }
   pthread_mutex_unlock(&(sock->recv_lock));
@@ -228,7 +229,14 @@ void *begin_backend(void *in) {
   int death, buf_len, send_signal;
   uint8_t *data;
 
-  while (1) {
+  int err = slide_window_init(&(sock->window),sock);
+	if(err != EXIT_SUCCESS){
+		fprintf(stderr,"滑窗初始化失败\n");
+		pthread_exit(NULL); 
+		return NULL;
+	}
+  while (1) 
+  {
     while (pthread_mutex_lock(&(sock->death_lock)) != 0) {
     }
     death = sock->dying;
@@ -236,39 +244,23 @@ void *begin_backend(void *in) {
 
     while (pthread_mutex_lock(&(sock->send_lock)) != 0) {
     }
-    buf_len = sock->sending_len;
-
-    if (death && buf_len == 0) {
-      break;
-    }
-
-    if (buf_len > 0) {
-      data = malloc(buf_len);
-      memcpy(data, sock->sending_buf, buf_len);
-      sock->sending_len = 0;
-      free(sock->sending_buf);
-      sock->sending_buf = NULL;
-      pthread_mutex_unlock(&(sock->send_lock));
-      single_send(sock, data, buf_len);
-      free(data);
-    } else {
-      pthread_mutex_unlock(&(sock->send_lock));
-    }
-
-    check_for_data(sock, NO_WAIT);
-
-    while (pthread_mutex_lock(&(sock->recv_lock)) != 0) {
-    }
-
-    send_signal = sock->received_len > 0;
-
-    pthread_mutex_unlock(&(sock->recv_lock));
-
-    if (send_signal) {
-      pthread_cond_signal(&(sock->wait_cond));
-    }
+    if(death && sock->state == TCP_CLOSED){
+			fprintf(stderr,"exited....\n");
+			break;
+		}
+		if((sock->state == TCP_CLOSED)){
+    		pthread_cond_signal(&(sock->wait_cond));  
+			  fprintf(stderr,"exiting....\n");
+		}
+		else{
+      //启用滑窗
+			slide_window_activate(&sock->window,sock);
+		}
+		pthread_mutex_unlock(&(sock->send_lock));
+		slide_window_check_for_data(&sock->window,sock,NO_WAIT);
   }
-
+  //关闭滑窗
+  slide_window_close(&(sock->window));
   pthread_exit(NULL);
   return NULL;
 }
