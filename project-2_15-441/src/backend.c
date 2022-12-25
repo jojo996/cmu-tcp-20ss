@@ -227,7 +227,7 @@ void single_send(cmu_socket_t *sock, uint8_t *data, int buf_len) {
 void *begin_backend(void *in) {
   cmu_socket_t *sock = (cmu_socket_t *)in;
   int death, buf_len, send_signal;
-  uint8_t *data;
+  
 
   int err = slide_window_init(&(sock->window),sock);
 	if(err != EXIT_SUCCESS){
