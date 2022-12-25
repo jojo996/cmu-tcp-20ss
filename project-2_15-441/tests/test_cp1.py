@@ -9,8 +9,8 @@
 
 from pathlib import Path
 
-from scapy.all import rdpcap
-from fabric import Connection
+# from scapy.all import rdpcap
+# from fabric import Connection
 
 from common import PCAP, CMUTCP, ACK_MASK, IP_ADDRS
 
