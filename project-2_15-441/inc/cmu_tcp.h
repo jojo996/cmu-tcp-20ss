@@ -32,11 +32,14 @@
 #define MAXSEQ 100
 #define MAX_BUFFER_SIZE 1000000
 
+/* 滑窗的下标 */
+typedef int SWPSeq;  /* slide window protocol序列号 */
 
 // 发送方状态
 typedef enum {
 	SS_DEFAULT = 1,   // 默认
 	SS_TIME_OUT = 2,   // 超时
+  SS_RESEND = 3,   /* 重发事件 */
 	SS_SEND_OVER = 4,  // 当前数据发送完成
 } send_state;
 
@@ -65,7 +68,11 @@ typedef struct {
 	uint32_t LFS; 
   uint32_t DAT; // 数据的最大下标
 
+  FILE *log;
+
   //超时控制
+  struct timeval time_send;  /* 发送包的时间 */
+  SWPSeq send_seq;
   uint8_t timer_flag;  // 时钟启用状态
   long TimeoutInterval;  // 超时时间 
 	long EstimatedRTT;  // （加权）平均RTT时间

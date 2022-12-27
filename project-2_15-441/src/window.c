@@ -1,5 +1,81 @@
 #include "cmu_tcp.h"
 #include "window.h"
+#include <signal.h>
+#include <time.h>
+#include <sys/time.h>
+#include <stdio.h>
+
+#define RESEND_TIME 3
+
+/* 返回timeval数据结构对应的微秒值 */
+long get_timeval(struct timeval *time){
+    return 1l*(time->tv_sec*1000000)+time->tv_usec;
+}
+
+/* 设置timeval的时间 */
+void set_timeval(struct timeval *time, long interval){
+    long int sec = interval / 1000000;
+    long int usec = interval % 1000000;
+    time->tv_sec = sec;
+    time->tv_usec = usec;
+}
+
+/* 设置计时 */
+void set_timer(int sec, int usec, void (*handler)(int)){
+    /* 设置时间到达后的处理函数,注意这里占用了SIGALRM信号 */
+    // printf("timer set\n");
+    signal(SIGALRM,handler);
+    struct itimerval itv;
+    itv.it_interval.tv_sec=0;//自动装载，之后每10秒响应一次
+    itv.it_interval.tv_usec=0;
+    itv.it_value.tv_sec=sec;//第一次定时的时间
+    itv.it_value.tv_usec=usec;
+    setitimer(ITIMER_REAL,&itv,NULL);
+}
+
+/* 关闭计时 */
+void unset_timer(){
+    /* 设置回默认信号处理方式，也可以屏蔽信号 */
+    // printf("unset timer\n");
+    signal(SIGALRM,SIG_DFL);
+    struct itimerval itv;
+    itv.it_interval.tv_sec=0;//设置为0
+    itv.it_interval.tv_usec=0;
+    itv.it_value.tv_sec=0;
+    itv.it_value.tv_usec=0;
+    setitimer(ITIMER_REAL,&itv,NULL);
+}
+
+static void last_time_wait(int sig, void *ptr){
+    static cmu_socket_t *sock;
+    /* 首次调用初始化win参数 */
+    if(sock == NULL){
+        sock = (cmu_socket_t *)ptr;
+        return;
+    }
+    else{
+        /* 结束线程 */
+        sock->state = TCP_CLOSED;
+    }
+}
+
+/* 处理SIGALRM信号，即超时信号 */
+static void time_out(int sig, void *ptr){
+    static window_t *win;
+    /* 首次调用初始化win参数 */
+    if(win == NULL){
+        win = (window_t *)ptr;
+        return;
+    }
+    /* 正常的信号处理 */
+    else{
+        win->timer_flag = 0;
+        win->state = SS_TIME_OUT;
+        fprintf(stdout,"-------time out------------\n");
+        fflush(stdout);
+        unset_timer();
+    }
+}
 
 /* 初始化一个滑窗 */
 int slide_window_init(window_t *win,  cmu_socket_t *sock)
@@ -14,6 +90,10 @@ int slide_window_init(window_t *win,  cmu_socket_t *sock)
     win->EstimatedRTT = 1000000;
     win->DevRTT = 0;
     win->state = SS_DEFAULT;
+    /* 初始化信号处理函数，以便超时能够访问window */
+    time_out(0,win);
+    /* 初始化信号处理函数，以便超时能够访问socket */
+    last_time_wait(0,sock);
     return EXIT_SUCCESS;
 }
 
@@ -72,7 +152,17 @@ void slide_window_send(window_t *win, cmu_socket_t *sock)
 {
 	char* msg;
     char *data;
+    int plen;
 	size_t conn_len = sizeof(sock->conn);
+    /* 当前发送的序列号 */
+	uint32_t ack;
+    /* 当前打包的seq */
+    uint32_t mkpkt_seq = win->last_ack_received;
+    int buf_len,adv_len = MAX_LEN;
+
+    ack = win->last_seq_received;
+
+    /* 如果数据已经全部发送了，等待ACK或者超时 */
     if((win->DAT == win->LFS)&&(win->state == SS_DEFAULT)){
         win->state = SS_SEND_OVER;
         sleep(1);
@@ -90,28 +180,65 @@ void slide_window_send(window_t *win, cmu_socket_t *sock)
             free(data);
             msg = NULL;
             data = NULL;
-            // // 如果没有设置计时器，设置时钟
-            // if(!win->timer_flag){
-            //     set_timer(win->TimeoutInterval/1000000,win->TimeoutInterval%1000000,(void (*)(int))time_out);
-            //     win->timer_flag = 1;
-            // }
+            // 如果没有设置计时器，设置时钟
+            if(!win->timer_flag){
+                set_timer(win->TimeoutInterval/1000000,win->TimeoutInterval%1000000,(void (*)(int))time_out);
+                win->timer_flag = 1;
+            }
+            /* 发送指针后移 */
+            win->LFS += win->adv_window;
             break;
-        // case SS_TIME_OUT:  // 超时
-        //     data = (char *)malloc(win->adv_window);
-        //     msg = create_packet(sock->my_port, sock->their_port, 
-        //         win->last_ack_received, win->last_seq_received, 
-        //         DEFAULT_HEADER_LEN, DEFAULT_HEADER_LEN + win->adv_window, NO_FLAG, win->adv_window, 0, NULL,
-        //         data, win->adv_window);
-        //     sendto(sock->socket, msg, DEFAULT_HEADER_LEN + win->adv_window, 0, (struct sockaddr*) &(sock->conn), conn_len);
-        //     free(msg);
-        //     free(data);
-        //     msg = NULL;
-        //     data = NULL;
-        //     unset_timer();
-        //     set_timer(win->TimeoutInterval/1000000,win->TimeoutInterval%1000000,(void (*)(int))time_out);
-        //     win->timer_flag = 1;
-        //     win->state = SS_DEFAULT;
-        //     break;
+         case SS_RESEND:  /* 马上重发 */
+            /* 如果缓存中有数据 */
+            if(win->LFS > win->LAR){
+                buf_len = win->LFS - win->LAR;
+                /* 如果包太长,分多次发送,每次只发送最大包长 */
+                buf_len = (buf_len <= adv_len)?buf_len:adv_len;
+                int plen = DEFAULT_HEADER_LEN + buf_len;
+                data = (char *)malloc(buf_len);
+                copy_string_from_buffer(win,win->LAR,data,buf_len);
+                mkpkt_seq = win->last_ack_received;
+                msg = create_packet_buf(sock->my_port, sock->their_port, 
+                    mkpkt_seq, ack, 
+                    DEFAULT_HEADER_LEN, plen, NO_FLAG, win->adv_window, 0, NULL,
+                    data, buf_len);
+                /* 发送UDP的包 */
+                sendto(sock->socket, msg, plen, 0, (struct sockaddr*) &(sock->conn), conn_len);
+                free(msg);
+                free(data);
+                msg = NULL;
+                data = NULL;
+                unset_timer();
+                set_timer(win->TimeoutInterval/1000000,win->TimeoutInterval%1000000,(void (*)(int))time_out);
+                win->timer_flag = 1;
+                /* 设置发送时间 */
+                if(win->send_seq == -1){
+                    win->send_seq = mkpkt_seq + buf_len;
+                    gettimeofday(&win->time_send,NULL);
+                }
+            }
+            win->state = SS_DEFAULT;
+            break;
+        case SS_TIME_OUT:  // 超时
+            if(win->LFS > win->LAR){
+                buf_len = win->LFS - win->LAR;
+            data = (char *)malloc(win->adv_window);
+            msg = create_packet_buf(sock->my_port, sock->their_port, 
+                    mkpkt_seq, ack, 
+                    DEFAULT_HEADER_LEN, plen, NO_FLAG, win->adv_window, 0, NULL,
+                    data, buf_len);
+            sendto(sock->socket, msg, DEFAULT_HEADER_LEN + win->adv_window, 0, (struct sockaddr*) &(sock->conn), conn_len);
+            free(msg);
+            free(data);
+            msg = NULL;
+            data = NULL;
+            unset_timer();
+            set_timer(win->TimeoutInterval/1000000,win->TimeoutInterval%1000000,(void (*)(int))time_out);
+            win->timer_flag = 1;
+            }
+            win->state = SS_DEFAULT;
+            break;
+        
         case SS_SEND_OVER:
             win->state = SS_DEFAULT;
             break;
@@ -214,8 +341,14 @@ static void slide_window_handle_message(window_t * win, cmu_socket_t *sock, char
                 }
                 // 提醒发送者可以发送了
                 win->state = SS_DEFAULT;
-                // /* 重置计时器 */
-                // unset_timer();               
+                /* 重置计时器 */
+                unset_timer();               
+            }
+            else{  /* 收到错序的ACK */
+                win->dup_ack_num++;
+                if(win->dup_ack_num == 3){
+                    resend(win);
+                }
             }
             break;
         case FIN_FLAG_MASK:{/* 包含FIN */
@@ -256,9 +389,9 @@ static void slide_window_handle_message(window_t * win, cmu_socket_t *sock, char
             /* 通知上层可以读取数据,打破上层读取的循环 */
             pthread_cond_signal(&(sock->wait_cond));  
             sock->state = TCP_TIME_WAIT;
-            // /* 启动TIME WAIT */
-            // set_timer(win->TimeoutInterval/1000000,win->TimeoutInterval%1000000,(void (*)(int))last_time_wait);
-            // break;
+            /* 启动TIME WAIT */
+            set_timer(win->TimeoutInterval/1000000,win->TimeoutInterval%1000000,(void (*)(int))last_time_wait);
+            break;
         } 
         //不含ACK？？？
 		// default:
@@ -321,4 +454,15 @@ static void slide_window_handle_message(window_t * win, cmu_socket_t *sock, char
         //     }
 		// 	break;
 	}
+}
+
+static void resend(window_t * win){
+    win->state = SS_RESEND;
+    fprintf(win->log,"resending.......done\n");
+}
+
+/* 关闭滑窗 */
+void slide_window_close(window_t *win){
+    fclose(win->log);
+    signal(SIGALRM,SIG_DFL);
 }
