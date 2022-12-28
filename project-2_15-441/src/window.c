@@ -123,6 +123,20 @@ static void copy_string_to_buffer(window_t *win, cmu_socket_t* sock){
     win->DAT += buf_len;
 }
 
+static int copy_string_from_buffer(window_t *win, SWPSeq idx, char *data, int max_len){
+    idx = idx % MAX_BUFFER_SIZE;
+    int len = min(win->DAT-idx,max_len);
+    int start = idx % MAX_BUFFER_SIZE;
+    if(start + len > MAX_BUFFER_SIZE){
+        int temp = MAX_BUFFER_SIZE-start;
+        memcpy(data,win->send_buffer+start, temp);
+        memcpy(data+temp,win->send_buffer,len-temp);
+    }
+    else{
+        memcpy(data,win->send_buffer+start, len);
+    }
+    return len;
+}
 
 void slide_window_activate(window_t *win, cmu_socket_t *sock)
 {

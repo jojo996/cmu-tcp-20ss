@@ -139,7 +139,29 @@ uint8_t* create_packet(uint16_t src, uint16_t dst, uint32_t seq, uint32_t ack,
                        uint16_t hlen, uint16_t plen, uint8_t flags,
                        uint16_t adv_window, uint16_t ext_len, uint8_t* ext_data,
                        uint8_t* payload, uint16_t payload_len);
+char* create_packet_buf(uint16_t src, uint16_t dst, uint32_t seq, uint32_t ack,
+    uint16_t hlen, uint16_t plen, uint8_t flags, uint16_t adv_window, 
+    uint16_t ext, char* ext_data, char* data, int len);
 
+typedef struct {
+	uint32_t identifier;   		//4 bytes
+	uint16_t source_port;		//2 bytes
+	uint16_t destination_port;	//2 bytes
+	uint32_t seq_num; 			//4 bytes
+	uint32_t ack_num; 			//4 bytes
+	uint16_t hlen;				//2 bytes //header length
+	uint16_t plen;				//2 bytes //packet length
+	uint8_t flags;				//1 byte
+	uint16_t advertised_window; //2 bytes
+	uint16_t extension_length;  //2 bytes
+	char* extension_data;	    //X bytes
+} cmu_header_t;
+
+typedef struct {
+	cmu_header_t header;
+	struct timeval sent_time;
+	char* data;
+} cmu_packet_t;
 /**
  * Checks if a given sequence number comes before another sequence number.
  *

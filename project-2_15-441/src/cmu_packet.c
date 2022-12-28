@@ -151,3 +151,19 @@ uint8_t* create_packet(uint16_t src, uint16_t dst, uint32_t seq, uint32_t ack,
 
   return packet;
 }
+
+char* create_packet_buf(uint16_t src, uint16_t dst, uint32_t seq, uint32_t ack,
+    uint16_t hlen, uint16_t plen, uint8_t flags, uint16_t adv_window, 
+    uint16_t ext, char* ext_data, char* data, int len){
+
+    cmu_packet_t* temp;
+    char* final;  
+
+    temp = create_packet(src, dst, seq, ack, hlen, plen, flags, adv_window, 
+        ext, ext_data, data, len);
+
+    final = packet_to_buf(temp);
+
+    free_packet(temp);
+    return final;
+}
