@@ -16,7 +16,18 @@
 #ifndef PROJECT_2_15_441_INC_CMU_PACKET_H_
 #define PROJECT_2_15_441_INC_CMU_PACKET_H_
 
+#include <netinet/in.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <sys/socket.h>
 #include <stdint.h>
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include "global.h"
+#include "grading.h"
 
 typedef struct {
   uint32_t identifier;         // 4 Identifier for the CMU-TCP protocol.
@@ -67,6 +78,7 @@ void set_advertised_window(cmu_tcp_header_t* header,
                            uint16_t advertised_window);
 void set_extension_length(cmu_tcp_header_t* header, uint16_t extension_length);
 void set_extension_data(cmu_tcp_header_t* header, uint8_t* extension_data);
+void free_packet(cmu_packet_t* packet);
 
 /**
  * Sets all the header fields.

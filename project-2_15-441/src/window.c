@@ -7,6 +7,10 @@
 
 #define RESEND_TIME 3
 
+static SWPSeq min(SWPSeq x, SWPSeq y){
+    return (x<y)?x:y;
+}
+
 /* 返回timeval数据结构对应的微秒值 */
 long get_timeval(struct timeval *time){
     return 1l*(time->tv_sec*1000000)+time->tv_usec;
