@@ -23,6 +23,7 @@
 
 #include "backend.h"
 
+
 int cmu_socket(cmu_socket_t *sock, const cmu_socket_type_t socket_type,
                const int port, const char *server_ip) {
   int sockfd, optval;
@@ -110,24 +111,48 @@ int cmu_socket(cmu_socket_t *sock, const cmu_socket_type_t socket_type,
 }
 
 int cmu_close(cmu_socket_t *sock) {
-  while (pthread_mutex_lock(&(sock->death_lock)) != 0) {
+  while (1){
+    while(pthread_mutex_lock(&(sock->send_lock)) != 0);
+    if(((sock->window.DAT == sock->window.LAR) && (sock->sending_len == 0))){
+      // printf("closing: DAT: %d, LAR: %d, len: %d\n",sock->window.DAT,sock->window.LAR,sock->sending_len);
+      pthread_mutex_unlock(&(sock->send_lock));
+      break;
+    }
+    // printf("close: DAT: %d, LAR: %d, len: %d\n",sock->window.DAT,sock->window.LAR,sock->sending_len);
+    pthread_mutex_unlock(&(sock->send_lock));
+    sleep(1);
   }
-  sock->dying = 1;
+  /* 连接关闭 */
+  while(pthread_mutex_lock(&(sock->death_lock)) != 0);
+  /* 进入等待结束一阶段 */
+  if(sock->state == TCP_ESTABLISHED){
+    /* 发送FIN包 */
+    char *packet = create_packet_buf(sock->my_port, sock->their_port, 
+              sock->window.last_ack_received,
+              sock->window.last_seq_received, 
+              DEFAULT_HEADER_LEN, DEFAULT_HEADER_LEN, FIN_FLAG_MASK,
+            /*TODO*/sock->window.my_adv_window, 0, NULL, NULL, 0);
+    sendto(sock->socket, packet, DEFAULT_HEADER_LEN, 0, 
+              (struct sockaddr*) &(sock->conn), sizeof(sock->conn));
+    free(packet);
+    sock->state = TCP_FIN_WAIT1;
+  }
+  sock->dying = TRUE;
   pthread_mutex_unlock(&(sock->death_lock));
-
-  pthread_join(sock->thread_id, NULL);
-
-  if (sock != NULL) {
-    if (sock->received_buf != NULL) {
+  /* 回收线程 */
+  pthread_join(sock->thread_id, NULL); 
+  /* 释放缓冲区 */
+  if(sock != NULL){
+    if(sock->received_buf != NULL)
       free(sock->received_buf);
-    }
-    if (sock->sending_buf != NULL) {
+    if(sock->sending_buf != NULL)
       free(sock->sending_buf);
-    }
-  } else {
-    perror("ERROR null socket\n");
+  }
+  else{
+    perror("ERORR Null scoket\n");
     return EXIT_ERROR;
   }
+  /* 关闭UDP socket */
   return close(sock->socket);
 }
 
