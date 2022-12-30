@@ -19,6 +19,28 @@
 #include <stdlib.h>
 #include <string.h>
 
+void free_packet(cmu_packet_t* packet){
+    if(packet->data != NULL)
+         free(packet->data);
+    if(packet->header.extension_data != NULL)
+        free(packet->header.extension_data);
+    free(packet);
+}
+char* packet_to_buf(cmu_packet_t* p){
+    /* 拷贝头部信息 */
+    char* msg = set_headers(p->header.source_port, p->header.destination_port, 
+        p->header.seq_num, p->header.ack_num, p->header.hlen, p->header.plen, 
+        p->header.flags, p->header.advertised_window, 
+        p->header.extension_length, p->header.extension_data);
+    /* 拷贝扩展信息 */
+    if(p->header.extension_length > 0)
+        memcpy(msg+(DEFAULT_HEADER_LEN), p->header.extension_data, 
+            p->header.extension_length);
+    /* 拷贝数据段 */
+    if(p->header.plen > p->header.hlen)
+        memcpy(msg+(p->header.hlen), p->data, (p->header.plen - (p->header.hlen)));
+    return msg;
+}
 uint16_t get_src(cmu_tcp_header_t* header) {
   return ntohs(header->source_port);
 }
@@ -151,6 +173,7 @@ uint8_t* create_packet(uint16_t src, uint16_t dst, uint32_t seq, uint32_t ack,
 
   return packet;
 }
+
 
 char* create_packet_buf(uint16_t src, uint16_t dst, uint32_t seq, uint32_t ack,
     uint16_t hlen, uint16_t plen, uint8_t flags, uint16_t adv_window, 
